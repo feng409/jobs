@@ -14,7 +14,7 @@ import logging
 from typing import List
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver, WebElement
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.support.ui import WebDriverWait
@@ -52,6 +52,7 @@ def init_selenium(load_cookies=False) -> RemoteWebDriver:
     '''
     options.add_argument('--auto-open-devtools-for-tabs')
     options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    options.add_argument("enable-features=NetworkServiceInProcess")
     browser = webdriver.Chrome(options=options)
     browser.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": script})
     browser.get(HOMEPAGE)
@@ -93,36 +94,39 @@ def say_hello(driver: RemoteWebDriver, url: str) -> None:
 
 def find_job(driver: RemoteWebDriver, job_url: str, page_count: int) -> List[JobItem]:
     items = []
-    try:
-        for page in range(1, page_count + 1):
-            url = f'{job_url}&page={page}'
-            _current_page_jobs = _find_job(driver, url)
-            items.extend(_current_page_jobs)
-        return items
-    except NoSuchElementException as e:
-        logger.exception(e)
+    for page in range(1, page_count + 1):
+        url = f'{job_url}&page={page}'
+        _current_page_jobs = _find_job(driver, url)
+        items.extend(_current_page_jobs)
+    return items
 
 
 def _find_job(driver: RemoteWebDriver, job_url: str) -> List[JobItem]:
     items = []
-    wait = WebDriverWait(driver, 5)
+    try:
+        wait = WebDriverWait(driver, 5)
 
-    driver.get(job_url)
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.job-list')))
+        driver.get(job_url)
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div.job-list')))
 
-    ele_jobs = driver.find_elements_by_css_selector('div.job-list ul > li')
-    for ele_job in ele_jobs:
-        ele_job = ele_job  # type: WebElement
-        title = ele_job.find_element_by_css_selector('div.job-title').text
-        wage = ele_job.find_element_by_css_selector('div.job-limit span.red').text
-        company = ele_job.find_element_by_css_selector('div.company-text').text
-        button = ele_job.find_element_by_css_selector('button.btn-startchat')
-        say_hello_url = HOMEPAGE + button.get_attribute('data-url')
+        ele_jobs = driver.find_elements_by_css_selector('div.job-list ul > li')
+        for ele_job in ele_jobs:
+            ele_job = ele_job  # type: WebElement
+            title = ele_job.find_element_by_css_selector('div.job-title').text
+            wage = ele_job.find_element_by_css_selector('div.job-limit span.red').text
+            company = ele_job.find_element_by_css_selector('div.company-text').text
+            button = ele_job.find_element_by_css_selector('button.btn-startchat')
+            say_hello_url = HOMEPAGE + button.get_attribute('data-url')
 
-        company = company.replace('\n', ' ')
-        logger.info('[click] [%s] {%s} (%s)', title, company, wage)
-        item = JobItem(title, wage, company, say_hello_url)
-        items.append(item)
+            company = company.replace('\n', ' ')
+            logger.info('[click] [%s] {%s} (%s)', title, company, wage)
+            item = JobItem(title, wage, company, say_hello_url)
+            items.append(item)
+    except NoSuchElementException as e:
+        logger.exception(e)
+    except TimeoutException as e:
+        logger.exception(e)
+        logger.error(job_url)
     return items
 
 
@@ -141,9 +145,10 @@ def main():
         for job_url in jobs_url:
             _jobs = find_job(driver, job_url, 6)
             jobs.extend(_jobs)
-        # handle_jobs(driver, jobs)
+        handle_jobs(driver, jobs)
     finally:
-        driver.quit()
+        pass
+        # driver.quit()
 
 
 if __name__ == '__main__':
