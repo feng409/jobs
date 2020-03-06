@@ -10,26 +10,18 @@
 # =============================================================================
 import json
 import time
-import logging
+from dataclasses import dataclass
 from typing import List
+
+from common import config, logger
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver, WebElement
 from selenium.webdriver import ChromeOptions
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver, WebElement
 from selenium.webdriver.support import expected_conditions as EC
-from dataclasses import dataclass
-
-import coloredlogs
-import yaml
-
-with open('config.yaml') as f:
-    config = yaml.load(f, yaml.FullLoader)
-
-logger = logging.getLogger()
-coloredlogs.install('INFO', logger=logger)
+from selenium.webdriver.support.ui import WebDriverWait
 
 HOMEPAGE = 'https://zhipin.com'
 LOGIN_URL = 'https://login.zhipin.com/?ka=header-login'
@@ -59,7 +51,7 @@ def init_selenium(load_cookies=False) -> RemoteWebDriver:
     browser.set_page_load_timeout(30)
     if load_cookies:
         logger.debug('load cookie')
-        with open('cookie.json') as f:
+        with open(config['zhipin']['cookie_file']) as f:
             cookies = json.load(f)
         for cookie in cookies:
             try:
@@ -120,6 +112,8 @@ def _find_job(driver: RemoteWebDriver, job_url: str) -> List[JobItem]:
 
             company = company.replace('\n', ' ')
             logger.info('[click] [%s] {%s} (%s)', title, company, wage)
+            if is_black_list_company(company):
+                continue
             item = JobItem(title, wage, company, say_hello_url)
             items.append(item)
     except NoSuchElementException as e:
@@ -128,6 +122,15 @@ def _find_job(driver: RemoteWebDriver, job_url: str) -> List[JobItem]:
         logger.exception(e)
         logger.error(job_url)
     return items
+
+
+def is_black_list_company(company_name: str) -> bool:
+    company_black_list = config['black_list']['company']
+    for keyword in company_black_list:
+        if keyword in company_name:
+            return True
+    else:
+        return False
 
 
 def handle_jobs(driver: RemoteWebDriver, jobs: List[JobItem]) -> None:
@@ -143,12 +146,11 @@ def main():
         jobs_url = config['zhipin']['job_url']
         jobs = []
         for job_url in jobs_url:
-            _jobs = find_job(driver, job_url, 6)
+            _jobs = find_job(driver, job_url, config['zhipin']['page'])
             jobs.extend(_jobs)
         handle_jobs(driver, jobs)
     finally:
-        pass
-        # driver.quit()
+        driver.quit()
 
 
 if __name__ == '__main__':
