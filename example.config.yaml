@@ -1,0 +1,12 @@
+black_list:
+  company:
+    - 'microsoft'
+
+zhipin:
+  PHONE: '12345'
+  PASSWORD: '12345'
+  page: 2 # 每个链接爬取页数
+  cookie_file: 'cookie_zhipin.json' # 网站的cookie文件，加载cookie免再次登录
+  job_url: # 想投递的岗位链接
+    - 'https://www.zhipin.com/c101280600/?query=python'
+
